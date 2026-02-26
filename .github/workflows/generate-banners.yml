@@ -1,0 +1,86 @@
+name: Generate Banners
+on:
+  schedule:
+    - cron: '0 */6 * * *' # Runs every 6 hours
+  workflow_dispatch: # Allows manual trigger from the Actions tab
+
+jobs:
+  screenshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          
+      - name: Install Playwright
+        run: npx playwright install --with-deps chromium
+        
+      - name: Capture Banners
+        run: |
+          cat << 'EOF' > screenshot.js
+          const { chromium } = require('playwright');
+          (async () => {
+            const browser = await chromium.launch();
+            // Larger viewport to capture everything, we will crop to the element
+            const context = await browser.newContext({ 
+              viewport: { width: 1200, height: 1600 },
+              deviceScaleFactor: 2 // High DPI for crisp text
+            });
+            const page = await context.newPage();
+            
+            // 1. Set theme to dark via cookie
+            await context.addCookies([{ 
+              name: 'theme', 
+              value: 'dark', 
+              domain: 'zulfikar.site', 
+              path: '/' 
+            }]);
+            
+            // 2. Visit the export route (Update this URL if your production site is different)
+            await page.goto('https://zulfikar.site/github-profile', { 
+              waitUntil: 'networkidle',
+              timeout: 60000 
+            });
+            
+            // 3. Inject CSS to ensure absolute clean background
+            await page.addStyleTag({ 
+              content: `
+                header, footer, nav, [role="banner"], [role="contentinfo"] { display: none !important; } 
+                #github-profile-export { background: transparent !important; padding: 20px !important; }
+                body { background: transparent !important; }
+              ` 
+            });
+            
+            // 4. Wait for data hydration (look for the absence of skeleton pulses)
+            await page.waitForSelector('#github-profile-export:not(:has(.animate-pulse))', { timeout: 30000 });
+            
+            // 5. Small delay for animations to settle
+            await page.waitForTimeout(2000);
+            
+            // 6. Take the screenshot of the specific container
+            const element = await page.$('#github-profile-export');
+            if (element) {
+              await element.screenshot({ 
+                path: 'banners.png', 
+                omitBackground: true 
+              });
+              console.log('Successfully captured banners.png');
+            } else {
+              console.error('Could not find #github-profile-export element');
+              process.exit(1);
+            }
+            
+            await browser.close();
+          })();
+          EOF
+          node screenshot.js
+          
+      - name: Commit and Push
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add banners.png
+          git commit -m "Update profile banners" || exit 0
+          git push
