@@ -15,7 +15,9 @@ jobs:
           node-version: 20
           
       - name: Install Playwright
-        run: npx playwright install --with-deps chromium
+        run: |
+          npm install playwright
+          npx playwright install --with-deps chromium
         
       - name: Capture Banners
         run: |
@@ -23,14 +25,13 @@ jobs:
           const { chromium } = require('playwright');
           (async () => {
             const browser = await chromium.launch();
-            // Larger viewport to capture everything, we will crop to the element
             const context = await browser.newContext({ 
               viewport: { width: 1200, height: 1600 },
-              deviceScaleFactor: 2 // High DPI for crisp text
+              deviceScaleFactor: 2 
             });
             const page = await context.newPage();
             
-            // 1. Set theme to dark via cookie
+            // Set theme to dark
             await context.addCookies([{ 
               name: 'theme', 
               value: 'dark', 
@@ -38,13 +39,11 @@ jobs:
               path: '/' 
             }]);
             
-            // 2. Visit the export route (Update this URL if your production site is different)
             await page.goto('https://zulfikar.site/github-profile', { 
               waitUntil: 'networkidle',
               timeout: 60000 
             });
             
-            // 3. Inject CSS to ensure absolute clean background
             await page.addStyleTag({ 
               content: `
                 header, footer, nav, [role="banner"], [role="contentinfo"] { display: none !important; } 
@@ -53,22 +52,17 @@ jobs:
               ` 
             });
             
-            // 4. Wait for data hydration (look for the absence of skeleton pulses)
+            // Wait for hydration
             await page.waitForSelector('#github-profile-export:not(:has(.animate-pulse))', { timeout: 30000 });
-            
-            // 5. Small delay for animations to settle
             await page.waitForTimeout(2000);
             
-            // 6. Take the screenshot of the specific container
             const element = await page.$('#github-profile-export');
             if (element) {
               await element.screenshot({ 
                 path: 'banners.png', 
                 omitBackground: true 
               });
-              console.log('Successfully captured banners.png');
             } else {
-              console.error('Could not find #github-profile-export element');
               process.exit(1);
             }
             
