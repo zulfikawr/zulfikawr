@@ -75,7 +75,7 @@ jobs:
         run: |
           # Use UTC+7 (Asia/Jakarta) or system time, but standard date is fine.
           DATE=$(date +"%d/%m/%Y %H:%M")
-          sed -i "s/Last updated: .*/Last updated: $DATE/" README.md
+          sed -i "s|Last updated: .*|Last updated: $DATE|" README.md
           
       - name: Commit and Push
         run: |
